@@ -46,6 +46,8 @@
 #define MAXLINE 4096
 #define MAXCLIENTS 256
 
+#define PORT 10005
+
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
 typedef struct {
@@ -68,9 +70,9 @@ enum {
     PINGREQ=12,
     PINGRESP=13,
     DISCONNECT=14
-} control_packet_type;
+} control_packet_types;
 
-const char flagBits[] = {(char) -1,
+const char flag_bits[] = {(char) -1,
                          (char) 0,
                          (char) 0,
                          (char) 0,
@@ -124,6 +126,44 @@ void releaseThreadSlot(int i){
 }
 
 
+enum connection_statuses {
+    DISCONNECTED=0
+};
+
+
+void encodeLength(unsigned int x, char *result){
+    char encodedByte;
+    do{
+        encodedByte = x % 128;
+        x = x / 128;
+        if( x>0 ){
+            encodedByte |= 128;
+        }else{
+            result[0] = encodedByte;
+            result = &result[1];
+        }
+    }while(x>0);
+    result[0] = '\0';
+}
+
+int decodeLength(char *encoded_length, int *read_bytes){
+    int mult = 1;
+    int value = 0;
+    int iteration = 0;
+    char encodedByte;
+    do{
+        encodedByte = encoded_length[0];
+        encoded_length = &encoded_length[1];
+        value += (encodedByte & 127) * mult;
+        mult *= 128;
+        if(mult > 128*128*128){
+            return -1;
+        }
+        iteration++;
+    }while((encodedByte & 128) != 0);
+    *read_bytes = iteration;
+    return value;
+}
 
 void handleClient(int thread_index){
 
@@ -132,27 +172,49 @@ void handleClient(int thread_index){
     /* Armazena o tamanho da string lida do cliente */
     ssize_t n;
     int connfd = threads[thread_index].connfd;
+    enum connection_statuses connection_status;
+    connection_status = DISCONNECTED;
+    while(1){
+        char buffer[MAXLINE];
 
-    while ((n=read(connfd, recvline, MAXLINE)) > 0) {
-        recvline[n]=0;
-        if ((fputs(recvline,stdout)) == EOF) {
-            printf("thread %d read EOF. closing connection", thread_index);
+        if(read(connfd,&buffer,MAXLINE) == 0){
+            printf("connection %d closed by client\n",connfd);
             break;
         }
-        printf("value %x\n", recvline[0]);
-
-        // RECEIVED NON_NULL MESSAGE IN RECVLINE
 
 
+        char fixed_header = buffer[0];
+        char control_packet_type = (char) ((0xF0 & fixed_header) >> 4);
+        char control_flag_bits = (char) (0xF & fixed_header);
+
+        if(flag_bits[control_packet_type]!= control_flag_bits){
+            printf("type doesn't match flag. closing connection %d", connfd);
+            break;
+        }
+
+        int n_bytes = 0;
+        int content_length = decodeLength(&buffer[1],&n_bytes);
 
 
+        printf("read %d %d %d\n",buffer[0], control_packet_type,control_flag_bits);
+        printf("message size = %d encoded in %d bytes\n", content_length,n_bytes);
 
+        write(connfd, NULL, 0);
 
-
-
-
-        write(connfd, recvline, strlen(recvline));
     }
+
+//    while ((n=read(connfd, recvline, MAXLINE)) > 0) {
+//        recvline[n]=0;
+//        if ((fputs(recvline,stdout)) == EOF) {
+//            printf("thread %d read EOF. closing connection", thread_index);
+//            break;
+//        }
+//        printf("value %x\n", recvline[0]);
+//
+//        // RECEIVED NON_NULL MESSAGE IN RECVLIN
+//
+//        write(connfd, recvline, strlen(recvline));
+//    }
 
     close(connfd);
     printf("closed connection %d\n",connfd);
@@ -172,7 +234,7 @@ int main (int argc, char **argv) {
     struct sockaddr_in servaddr;
 
     if (argc != 2) {
-        fprintf(stderr,"Uso: %s <Porta>\n",argv[0]);
+        fprintf(stderr,"Uso: %d <Porta>\n",PORT);
         fprintf(stderr,"Vai rodar um servidor de echo na porta <Porta> TCP\n");
         exit(1);
     }
@@ -201,7 +263,7 @@ int main (int argc, char **argv) {
     bzero(&servaddr, sizeof(servaddr));
     servaddr.sin_family      = AF_INET;
     servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    servaddr.sin_port        = htons(atoi(argv[1]));
+    servaddr.sin_port        = htons(PORT);
     if (bind(listenfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) == -1) {
         perror("bind :(\n");
         exit(3);
@@ -216,7 +278,7 @@ int main (int argc, char **argv) {
         exit(4);
     }
 
-    printf("[Servidor no ar. Aguardando conexões na porta %s]\n",argv[1]);
+    printf("[Servidor no ar. Aguardando conexões na porta %d]\n",PORT);
     printf("[Para finalizar, pressione CTRL+c ou rode um kill ou killall]\n");
 
 
