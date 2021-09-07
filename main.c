@@ -46,7 +46,7 @@
 #define MAXLINE 4096
 #define MAXCLIENTS 256
 
-#define PORT 10005
+#define PORT 10009
 
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -87,6 +87,24 @@ const char flag_bits[] = {(char) -1,
                          (char) 0,
                          (char) 0,
                          (char) 0};
+
+const char hasVariableHeader[] = {
+        -1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0
+};
 
 thread_t threads[MAXCLIENTS];
 
@@ -146,14 +164,15 @@ void encodeLength(unsigned int x, char *result){
     result[0] = '\0';
 }
 
-int decodeLength(char *encoded_length, int *read_bytes){
+int decodeLength(int connfd){
     int mult = 1;
     int value = 0;
     int iteration = 0;
     char encodedByte;
     do{
-        encodedByte = encoded_length[0];
-        encoded_length = &encoded_length[1];
+        if(read(connfd,&encodedByte,1)!=1){
+            return -1;
+        }
         value += (encodedByte & 127) * mult;
         mult *= 128;
         if(mult > 128*128*128){
@@ -161,8 +180,14 @@ int decodeLength(char *encoded_length, int *read_bytes){
         }
         iteration++;
     }while((encodedByte & 128) != 0);
-    *read_bytes = iteration;
     return value;
+}
+
+void printByteArray(char *arr, int size){
+    int i;
+    for(i=0;i<size;i++)
+        printf("%X ",arr[i]);
+    printf("\n");
 }
 
 void handleClient(int thread_index){
@@ -175,46 +200,55 @@ void handleClient(int thread_index){
     enum connection_statuses connection_status;
     connection_status = DISCONNECTED;
     while(1){
-        char buffer[MAXLINE];
 
-        if(read(connfd,&buffer,MAXLINE) == 0){
+        char fixed_header;
+
+        if(read(connfd,&fixed_header,1) != 1){
             printf("connection %d closed by client\n",connfd);
             break;
         }
 
-
-        char fixed_header = buffer[0];
         char control_packet_type = (char) ((0xF0 & fixed_header) >> 4);
         char control_flag_bits = (char) (0xF & fixed_header);
 
+        printf("fixed header %d, pct type %d, flag %d\n",fixed_header, control_packet_type,control_flag_bits);
         if(flag_bits[control_packet_type]!= control_flag_bits){
-            printf("type doesn't match flag. closing connection %d", connfd);
+            printf("type doesn't match flag. closing connection %d\n", connfd);
             break;
         }
 
-        int n_bytes = 0;
-        int content_length = decodeLength(&buffer[1],&n_bytes);
+        int content_length = decodeLength(connfd);
+        if(content_length == -1){
+            printf("invalid content length. connection %d closed by client\n",connfd);
+            break;
+        }
+        printf("message size = %d\n", content_length);
 
+        //TODO treat UNSUBSCRIBE
+        char has_variable_header = hasVariableHeader[control_packet_type];
+        char variable_header[2];
+        if(has_variable_header){
+            if(read(connfd,&variable_header,2)!=2){
+                printf("connection %d closed by client\n",connfd);
+                break;
+            }
+            printf("variable header present equals %x %x\n",variable_header[0],variable_header[1]);
+        }
 
-        printf("read %d %d %d\n",buffer[0], control_packet_type,control_flag_bits);
-        printf("message size = %d encoded in %d bytes\n", content_length,n_bytes);
+        int payload_length = content_length - (has_variable_header?2:0);
+        char payload[payload_length];
+
+        printf("reading %d bytes from payload\n",payload_length);
+        if(read(connfd,&payload,payload_length)!=payload_length){
+            printf("connection %d closed by client\n",connfd);
+            break;
+        }
+        printf("payload read: ");
+        printByteArray(payload,payload_length);
 
         write(connfd, NULL, 0);
 
     }
-
-//    while ((n=read(connfd, recvline, MAXLINE)) > 0) {
-//        recvline[n]=0;
-//        if ((fputs(recvline,stdout)) == EOF) {
-//            printf("thread %d read EOF. closing connection", thread_index);
-//            break;
-//        }
-//        printf("value %x\n", recvline[0]);
-//
-//        // RECEIVED NON_NULL MESSAGE IN RECVLIN
-//
-//        write(connfd, recvline, strlen(recvline));
-//    }
 
     close(connfd);
     printf("closed connection %d\n",connfd);
