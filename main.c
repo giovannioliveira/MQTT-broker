@@ -224,7 +224,6 @@ void handleClient(int thread_index){
         }
         printf("message size = %d\n", content_length);
 
-        //TODO treat UNSUBSCRIBE
         char has_variable_header = hasVariableHeader[control_packet_type];
         char variable_header[2];
         if(has_variable_header){
