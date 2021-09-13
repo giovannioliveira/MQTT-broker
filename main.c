@@ -46,8 +46,8 @@
 #define MAXLINE 4096
 #define MAXCLIENTS 256
 
-#define PORT 10009
-
+#define PORT 10007
+#define VARIABLE_HEADER_LEN 10
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
 typedef struct {
@@ -55,7 +55,7 @@ typedef struct {
     pthread_t thread;
 } thread_t;
 
-enum {
+enum control_packet_types {
     CONNECT=1,
     CONNACK=2,
     PUBLISH=3,
@@ -70,7 +70,11 @@ enum {
     PINGREQ=12,
     PINGRESP=13,
     DISCONNECT=14
-} control_packet_types;
+};
+
+enum connection_statuses {
+    DISCONNECTED=0
+};
 
 const char flag_bits[] = {(char) -1,
                          (char) 0,
@@ -90,17 +94,17 @@ const char flag_bits[] = {(char) -1,
 
 const char hasVariableHeader[] = {
         -1,
+        1,
         0,
         0,
         0,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
-        1,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
         0,
         0,
         0
@@ -142,12 +146,6 @@ void releaseThreadSlot(int i){
     printf("release slot %d\n",i);
 
 }
-
-
-enum connection_statuses {
-    DISCONNECTED=0
-};
-
 
 void encodeLength(unsigned int x, char *result){
     char encodedByte;
@@ -199,6 +197,9 @@ void handleClient(int thread_index){
     int connfd = threads[thread_index].connfd;
     enum connection_statuses connection_status;
     connection_status = DISCONNECTED;
+
+    int user_name_flag, password_flag, will_retain, will_qos, will_flag, clean_session, keep_alive;
+
     while(1){
 
         char fixed_header;
@@ -208,10 +209,10 @@ void handleClient(int thread_index){
             break;
         }
 
-        char control_packet_type = (char) ((0xF0 & fixed_header) >> 4);
-        char control_flag_bits = (char) (0xF & fixed_header);
+        int control_packet_type = ((0xF0 & fixed_header) >> 4);
+        int control_flag_bits = (0xF & fixed_header);
 
-        printf("fixed header %d, pct type %d, flag %d\n",fixed_header, control_packet_type,control_flag_bits);
+        printf("fixed header %x, pct type %x, flag %x\n",fixed_header, control_packet_type,control_flag_bits);
         if(flag_bits[control_packet_type]!= control_flag_bits){
             printf("type doesn't match flag. closing connection %d\n", connfd);
             break;
@@ -225,25 +226,81 @@ void handleClient(int thread_index){
         printf("message size = %d\n", content_length);
 
         char has_variable_header = hasVariableHeader[control_packet_type];
-        char variable_header[2];
+        char variable_header[VARIABLE_HEADER_LEN];
         if(has_variable_header){
-            if(read(connfd,&variable_header,2)!=2){
+            if(read(connfd,&variable_header,VARIABLE_HEADER_LEN)!=VARIABLE_HEADER_LEN){
                 printf("connection %d closed by client\n",connfd);
                 break;
             }
-            printf("variable header present equals %x %x\n",variable_header[0],variable_header[1]);
         }
 
-        int payload_length = content_length - (has_variable_header?2:0);
-        char payload[payload_length];
+
+        int payload_length = content_length - (has_variable_header?VARIABLE_HEADER_LEN:0);
+        char payload[payload_length+1];
 
         printf("reading %d bytes from payload\n",payload_length);
         if(read(connfd,&payload,payload_length)!=payload_length){
             printf("connection %d closed by client\n",connfd);
             break;
         }
-        printf("payload read: ");
-        printByteArray(payload,payload_length);
+
+        payload[payload_length] = '\0';
+
+
+        if(control_packet_type == CONNECT){
+
+
+            if( variable_header[0]!= 0 ||
+                variable_header[1]!= 4 ||
+                variable_header[2]!= 'M' ||
+                variable_header[3]!= 'Q' ||
+                variable_header[4]!= 'T' ||
+                variable_header[5]!= 'T' ||
+                variable_header[6]!= 4 ||
+                (variable_header[7] & 1) != 0){
+
+                printf("invalid variable header\n");
+                break;
+            }
+
+            user_name_flag = variable_header[7] & 0x80;
+            password_flag = variable_header[7] & 0x40;
+            will_retain = variable_header[7] & 0x20;
+            will_qos = variable_header[7] & 0x18;
+            will_flag = variable_header[7] & 0x04;
+            clean_session = variable_header[7] & 0x02;
+            keep_alive = (variable_header[8] << 4) + variable_header[9];
+
+            if(will_flag){
+                printf("unsuported will flag");
+                break;
+            }
+
+            int id_idx = 2;
+            int id_len = ((payload[0] << 4) + payload[1]);
+
+            printf("len %d\n",id_len);
+
+
+
+
+
+
+        }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
         write(connfd, NULL, 0);
 
