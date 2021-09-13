@@ -326,8 +326,10 @@ void handleClient(int thread_index){
 
             printf("message: %s\n",message);
 
-            //no response needed for QoS 1
+            //no response needed for QoS=0
             write(connfd, NULL, 0);
+
+            //TODO call publish function
 
         }
 
