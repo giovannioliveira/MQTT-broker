@@ -218,7 +218,8 @@ void handleClient(int thread_index){
         int control_packet_type = ((0xF0 & fixed_header) >> 4);
         int control_flag_bits = (0xF & fixed_header);
 
-        printf("fixed header %x, pct type %x, flag %x\n",fixed_header, control_packet_type,control_flag_bits);
+
+        printf("\nNEW MQTT PACK: fixed header %x, pack type %x, flag %x\n",fixed_header, control_packet_type,control_flag_bits);
         if(flag_bits[control_packet_type]!= control_flag_bits){
             printf("type doesn't match flag. closing connection %d\n", connfd);
             break;
@@ -285,6 +286,8 @@ void handleClient(int thread_index){
             int id_idx = 2;
             int id_len = ((payload[0] << 4) + payload[1]);
 
+            if(this_thread.id)
+                free(this_thread.id);
             this_thread.id = malloc(id_len+1);
             //TODO check malloc ( and consider null id ? )
             memcpy(this_thread.id,&payload[id_idx],id_len);
@@ -311,7 +314,7 @@ void handleClient(int thread_index){
     }
 
     close(connfd);
-    printf("closed connection %d\n",connfd);
+    printf("\nclosed connection %d\n",connfd);
     releaseThreadSlot(thread_index);
 }
 
