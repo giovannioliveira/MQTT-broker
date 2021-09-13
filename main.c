@@ -50,11 +50,7 @@
 #define VARIABLE_HEADER_LEN 10
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
-typedef struct {
-    int connfd;
-    pthread_t thread;
-    char *id;
-} thread_t;
+
 
 enum control_packet_types {
     CONNECT=1,
@@ -74,7 +70,9 @@ enum control_packet_types {
 };
 
 enum connection_statuses {
-    DISCONNECTED=0
+    DISCONNECTED=0,
+    CONNECTED=1,
+
 };
 
 const unsigned char flag_bits[] = {(unsigned char) -1,
@@ -110,6 +108,13 @@ const unsigned char hasVariableHeader[] = {
         0,
         0
 };
+
+typedef struct {
+    int connfd;
+    pthread_t thread;
+    char *id;
+    enum connection_statuses connstat;
+} thread_t;
 
 thread_t threads[MAXCLIENTS];
 
@@ -195,9 +200,9 @@ void handleClient(int thread_index){
     unsigned char recvline[MAXLINE + 1];
     /* Armazena o tamanho da string lida do cliente */
     ssize_t n;
-    int connfd = threads[thread_index].connfd;
-    enum connection_statuses connection_status;
-    connection_status = DISCONNECTED;
+    thread_t this_thread = threads[thread_index];
+    this_thread.connstat = DISCONNECTED;
+    int connfd = this_thread.connfd;
 
     int user_name_flag, password_flag, will_retain, will_qos, will_flag, clean_session, keep_alive;
 
@@ -280,32 +285,28 @@ void handleClient(int thread_index){
             int id_idx = 2;
             int id_len = ((payload[0] << 4) + payload[1]);
 
-            thread_t t = threads[thread_index];
-            t.id = malloc(id_len+1);
-            //TODO check malloc
-            memcpy(t.id,&payload[id_idx],id_len);
-            t.id[id_len] = '\0';
+            this_thread.id = malloc(id_len+1);
+            //TODO check malloc ( and consider null id ? )
+            memcpy(this_thread.id,&payload[id_idx],id_len);
+            this_thread.id[id_len] = '\0';
 
-            printf("Received CONNECT for node %d with ID=%s\n",thread_index,t.id);
+            printf("Received CONNECT for node %d with ID=%s. Accepting connection\n",thread_index,this_thread.id);
+
+            unsigned char connack_response[4];
+            connack_response[0] = 0x20;
+            connack_response[1] = 0x02;
+            //TODO implement session cache
+            connack_response[2] = 0x00;
+            connack_response[3] = 0x00; // accepted connection
+
+            write(connfd, connack_response, 4);
+            this_thread.connstat = CONNECTED;
+
+            printf("MQTT connection established with %s\n",this_thread.id);
 
 
         }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        write(connfd, NULL, 0);
 
     }
 
