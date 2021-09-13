@@ -193,6 +193,10 @@ void printByteArray(unsigned char *arr, int size){
     printf("\n");
 }
 
+void publish(char *topic_name, char *message, char *packet_id){
+
+}
+
 void handleClient(int thread_index){
 
     /* Armazena linhas recebidas do cliente */
@@ -307,8 +311,23 @@ void handleClient(int thread_index){
             printf("MQTT connection established with %s\n",this_thread.id);
 
         }else if(this_thread.connstat == CONNECTED && control_packet_type == PUBLISH){
-            //int topic_name_len = va
 
+            int topic_name_len = (variable_header[0] << 4)+variable_header[1];
+            char topic_name[topic_name_len+1];
+            memcpy(topic_name,payload,topic_name_len);
+            topic_name[topic_name_len] = '\0';
+
+            printf("publish request -> topic name: %s; ",topic_name);
+
+            int message_len = payload_length-topic_name_len;
+            char message[message_len+1];
+            memcpy(message,&payload[topic_name_len],message_len);
+            message[message_len] = '\0';
+
+            printf("message: %s\n",message);
+
+            //no response needed for QoS 1
+            write(connfd, NULL, 0);
 
         }
 
