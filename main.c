@@ -53,6 +53,7 @@ pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 typedef struct {
     int connfd;
     pthread_t thread;
+    char *id;
 } thread_t;
 
 enum control_packet_types {
@@ -76,23 +77,23 @@ enum connection_statuses {
     DISCONNECTED=0
 };
 
-const char flag_bits[] = {(char) -1,
-                         (char) 0,
-                         (char) 0,
-                         (char) 0,
-                         (char) 0,
-                         (char) 0,
-                         (char) 2,
-                         (char) 0,
-                         (char) 2,
-                         (char) 0,
-                         (char) 2,
-                         (char) 0,
-                         (char) 0,
-                         (char) 0,
-                         (char) 0};
+const unsigned char flag_bits[] = {(unsigned char) -1,
+                         (unsigned char) 0,
+                         (unsigned char) 0,
+                         (unsigned char) 0,
+                         (unsigned char) 0,
+                         (unsigned char) 0,
+                         (unsigned char) 2,
+                         (unsigned char) 0,
+                         (unsigned char) 2,
+                         (unsigned char) 0,
+                         (unsigned char) 2,
+                         (unsigned char) 0,
+                         (unsigned char) 0,
+                         (unsigned char) 0,
+                         (unsigned char) 0};
 
-const char hasVariableHeader[] = {
+const unsigned char hasVariableHeader[] = {
         -1,
         1,
         0,
@@ -147,8 +148,8 @@ void releaseThreadSlot(int i){
 
 }
 
-void encodeLength(unsigned int x, char *result){
-    char encodedByte;
+void encodeLength(unsigned int x, unsigned char *result){
+    unsigned char encodedByte;
     do{
         encodedByte = x % 128;
         x = x / 128;
@@ -166,7 +167,7 @@ int decodeLength(int connfd){
     int mult = 1;
     int value = 0;
     int iteration = 0;
-    char encodedByte;
+    unsigned char encodedByte;
     do{
         if(read(connfd,&encodedByte,1)!=1){
             return -1;
@@ -181,7 +182,7 @@ int decodeLength(int connfd){
     return value;
 }
 
-void printByteArray(char *arr, int size){
+void printByteArray(unsigned char *arr, int size){
     int i;
     for(i=0;i<size;i++)
         printf("%X ",arr[i]);
@@ -191,7 +192,7 @@ void printByteArray(char *arr, int size){
 void handleClient(int thread_index){
 
     /* Armazena linhas recebidas do cliente */
-    char recvline[MAXLINE + 1];
+    unsigned char recvline[MAXLINE + 1];
     /* Armazena o tamanho da string lida do cliente */
     ssize_t n;
     int connfd = threads[thread_index].connfd;
@@ -202,7 +203,7 @@ void handleClient(int thread_index){
 
     while(1){
 
-        char fixed_header;
+        unsigned char fixed_header;
 
         if(read(connfd,&fixed_header,1) != 1){
             printf("connection %d closed by client\n",connfd);
@@ -225,10 +226,10 @@ void handleClient(int thread_index){
         }
         printf("message size = %d\n", content_length);
 
-        char has_variable_header = hasVariableHeader[control_packet_type];
-        char variable_header[VARIABLE_HEADER_LEN];
+        unsigned char has_variable_header = hasVariableHeader[control_packet_type];
+        unsigned char variable_header[VARIABLE_HEADER_LEN];
         if(has_variable_header){
-            if(read(connfd,&variable_header,VARIABLE_HEADER_LEN)!=VARIABLE_HEADER_LEN){
+            if(read(connfd,variable_header,VARIABLE_HEADER_LEN)!=VARIABLE_HEADER_LEN){
                 printf("connection %d closed by client\n",connfd);
                 break;
             }
@@ -236,10 +237,10 @@ void handleClient(int thread_index){
 
 
         int payload_length = content_length - (has_variable_header?VARIABLE_HEADER_LEN:0);
-        char payload[payload_length+1];
+        unsigned char payload[payload_length+1];
 
         printf("reading %d bytes from payload\n",payload_length);
-        if(read(connfd,&payload,payload_length)!=payload_length){
+        if(read(connfd,payload,payload_length)!=payload_length){
             printf("connection %d closed by client\n",connfd);
             break;
         }
@@ -279,11 +280,13 @@ void handleClient(int thread_index){
             int id_idx = 2;
             int id_len = ((payload[0] << 4) + payload[1]);
 
-            printf("len %d\n",id_len);
+            thread_t t = threads[thread_index];
+            t.id = malloc(id_len+1);
+            //TODO check malloc
+            memcpy(t.id,&payload[id_idx],id_len);
+            t.id[id_len] = '\0';
 
-
-
-
+            printf("Received CONNECT for node %d with ID=%s\n",thread_index,t.id);
 
 
         }
