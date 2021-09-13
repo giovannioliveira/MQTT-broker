@@ -47,7 +47,6 @@
 #define MAXCLIENTS 256
 
 #define PORT 10007
-#define VARIABLE_HEADER_LEN 10
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
 
@@ -69,12 +68,6 @@ enum control_packet_types {
     DISCONNECT=14
 };
 
-enum connection_statuses {
-    DISCONNECTED=0,
-    CONNECTED=1,
-
-};
-
 const unsigned char flag_bits[] = {(unsigned char) -1,
                          (unsigned char) 0,
                          (unsigned char) 0,
@@ -91,11 +84,11 @@ const unsigned char flag_bits[] = {(unsigned char) -1,
                          (unsigned char) 0,
                          (unsigned char) 0};
 
-const unsigned char hasVariableHeader[] = {
+const unsigned char variableHeaderLen[] = {
         -1,
-        1,
+        10, // CONNECT
         0,
-        0,
+        2, // PUBLISH
         0,
         0,
         0,
@@ -107,6 +100,12 @@ const unsigned char hasVariableHeader[] = {
         0,
         0,
         0
+};
+
+enum connection_statuses {
+    DISCONNECTED=0,
+    CONNECTED=1,
+
 };
 
 typedef struct {
@@ -232,17 +231,17 @@ void handleClient(int thread_index){
         }
         printf("message size = %d\n", content_length);
 
-        unsigned char has_variable_header = hasVariableHeader[control_packet_type];
-        unsigned char variable_header[VARIABLE_HEADER_LEN];
-        if(has_variable_header){
-            if(read(connfd,variable_header,VARIABLE_HEADER_LEN)!=VARIABLE_HEADER_LEN){
+        unsigned char variable_header_len = variableHeaderLen[control_packet_type];
+        unsigned char variable_header[variable_header_len];
+        if(variable_header_len){
+            if(read(connfd,variable_header,variable_header_len)!=variable_header_len){
                 printf("connection %d closed by client\n",connfd);
                 break;
             }
         }
 
 
-        int payload_length = content_length - (has_variable_header?VARIABLE_HEADER_LEN:0);
+        int payload_length = content_length - variable_header_len;
         unsigned char payload[payload_length+1];
 
         printf("reading %d bytes from payload\n",payload_length);
@@ -306,6 +305,9 @@ void handleClient(int thread_index){
             this_thread.connstat = CONNECTED;
 
             printf("MQTT connection established with %s\n",this_thread.id);
+
+        }else if(this_thread.connstat == CONNECTED && control_packet_type == PUBLISH){
+            //int topic_name_len = va
 
 
         }
