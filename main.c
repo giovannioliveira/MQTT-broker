@@ -116,28 +116,31 @@ typedef struct {
 } thread_t;
 
 thread_t threads[MAXCLIENTS];
+int client_count;
 
 void initThreadSlots(){
     int i;
     for(i = 0; i<MAXCLIENTS; i++){
         threads[i].connfd = 0;
     }
+    client_count = 0;
 }
 
 int getNewThreadSlot(int connfd){
-    int i;
-    pthread_mutex_lock(&lock);
-    for(i=0;i<MAXCLIENTS;i++){
-        if(!threads[i].connfd){
-            threads[i].connfd = connfd;
-            break;
-        }
-    }
-    pthread_mutex_unlock(&lock);
-    if(i>=MAXCLIENTS){
+    if(client_count>=MAXCLIENTS){
         printf("unable to found available slot for connection %d\n",connfd);
         return -1;
     }else{
+        int i;
+        pthread_mutex_lock(&lock);
+        for(i=0;i<MAXCLIENTS;i++){
+            if(!threads[i].connfd){
+                threads[i].connfd = connfd;
+                break;
+            }
+        }
+        client_count++;
+        pthread_mutex_unlock(&lock);
         printf("slot %d reserved for connection %d\n",i,connfd);
         return i;
     }
@@ -149,6 +152,7 @@ void releaseThreadSlot(int i){
     threads[i].connfd = 0;
     threads[i].connstat = DISCONNECTED;
     free(threads[i].id);
+    client_count--;
     pthread_mutex_unlock(&lock);
     printf("release slot %d\n",i);
 
