@@ -147,6 +147,8 @@ void releaseThreadSlot(int i){
 
     pthread_mutex_lock(&lock);
     threads[i].connfd = 0;
+    threads[i].connstat = DISCONNECTED;
+    free(threads[i].id);
     pthread_mutex_unlock(&lock);
     printf("release slot %d\n",i);
 
@@ -193,7 +195,11 @@ void printByteArray(unsigned char *arr, int size){
     printf("\n");
 }
 
-void publish(char *topic_name, char *message, char *packet_id){
+void mqtt_publish(char *topic_name, char *message){
+
+}
+
+void mqtt_disconnect(int thread_index){
 
 }
 
@@ -258,7 +264,6 @@ void handleClient(int thread_index){
 
 
         if(control_packet_type == CONNECT){
-
 
             if( variable_header[0]!= 0 ||
                 variable_header[1]!= 4 ||
@@ -329,7 +334,16 @@ void handleClient(int thread_index){
             //no response needed for QoS=0
             write(connfd, NULL, 0);
 
-            //TODO call publish function
+            mqtt_publish(topic_name,message);
+
+        } else if (this_thread.connstat == CONNECTED && control_packet_type == DISCONNECT){
+
+            puts("received disconnect mqtt request");
+            mqtt_disconnect(thread_index);
+
+        } else if (this_thread.connstat == CONNECTED && control_packet_type == SUBSCRIBE){
+
+            puts("subscribe request received");
 
         }
 
