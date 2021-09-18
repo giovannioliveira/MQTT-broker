@@ -40,13 +40,14 @@
 #include <time.h>
 #include <unistd.h>
 #include <pthread.h>
+#include "lib/set.h"
 
 #define LISTENQ 1
 #define MAXDATASIZE 100
 #define MAXLINE 4096
 #define MAXCLIENTS 256
 
-#define PORT 10007
+#define PORT 1883
 pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 
 
@@ -93,7 +94,7 @@ const unsigned char variableHeaderLen[] = {
         0,
         0,
         0,
-        0,
+        2,
         0,
         0,
         0,
@@ -113,6 +114,7 @@ typedef struct {
     pthread_t thread;
     char *id;
     enum connection_statuses connstat;
+    simple_set subscriptions;
 } thread_t;
 
 thread_t threads[MAXCLIENTS];
@@ -122,6 +124,7 @@ void initThreadSlots(){
     int i;
     for(i = 0; i<MAXCLIENTS; i++){
         threads[i].connfd = 0;
+        set_init(&threads[i].subscriptions);
     }
     client_count = 0;
 }
@@ -152,6 +155,7 @@ void releaseThreadSlot(int i){
     threads[i].connfd = 0;
     threads[i].connstat = DISCONNECTED;
     free(threads[i].id);
+    set_clear(&threads[i].subscriptions);
     client_count--;
     pthread_mutex_unlock(&lock);
     printf("release slot %d\n",i);
@@ -200,11 +204,31 @@ void printByteArray(unsigned char *arr, int size){
 }
 
 void mqtt_publish(char *topic_name, char *message){
+    printf("PUB %s %s",topic_name,message);
+    int i, cnt;
+    for(i=0,cnt=0;i<MAXCLIENTS && cnt<client_count;i++){
+        puts("swipe");
+        printf("%d %d \n",cnt,client_count);
+        thread_t t = threads[i];
+        if(t.connfd){
+            cnt++;
+            if(set_contains(&t.subscriptions,topic_name)){
+                printf("MESSAGE to conn %d;;; topic %s;;; message %s\n",i,topic_name,message);
+            }else{
+                puts("set doesnt contain");
+            }
+        }
+    }
 
 }
 
-void mqtt_disconnect(int thread_index){
+void mqtt_subscribe(char *topic_name, int thread_index){
+    printf("SUB %s %d\n",topic_name, thread_index);
+    set_add(& (threads[thread_index].subscriptions),topic_name);
+}
 
+void mqtt_disconnect(int thread_index){
+    printf("DISC %d\n",thread_index);
 }
 
 void handleClient(int thread_index){
@@ -232,7 +256,7 @@ void handleClient(int thread_index){
         int control_flag_bits = (0xF & fixed_header);
 
 
-        printf("\nNEW MQTT PACK: fixed header %x, pack type %x, flag %x\n",fixed_header, control_packet_type,control_flag_bits);
+        printf("\nNEW MQTT PACK: fixed header %x\n",fixed_header);
         if(flag_bits[control_packet_type]!= control_flag_bits){
             printf("type doesn't match flag. closing connection %d\n", connfd);
             break;
@@ -326,14 +350,11 @@ void handleClient(int thread_index){
             memcpy(topic_name,payload,topic_name_len);
             topic_name[topic_name_len] = '\0';
 
-            printf("publish request -> topic name: %s; ",topic_name);
 
             int message_len = payload_length-topic_name_len;
             char message[message_len+1];
             memcpy(message,&payload[topic_name_len],message_len);
             message[message_len] = '\0';
-
-            printf("message: %s\n",message);
 
             //no response needed for QoS=0
             write(connfd, NULL, 0);
@@ -342,15 +363,45 @@ void handleClient(int thread_index){
 
         } else if (this_thread.connstat == CONNECTED && control_packet_type == DISCONNECT){
 
-            puts("received disconnect mqtt request");
             mqtt_disconnect(thread_index);
 
         } else if (this_thread.connstat == CONNECTED && control_packet_type == SUBSCRIBE){
 
-            puts("subscribe request received");
+            int payload_idx = 0;
+            int sub_cnt = 0;
+            while(payload_idx < (payload_length-1)){
+                int topic_name_len = (payload[payload_idx] << 4)+payload[payload_idx+1];
+                char topic_name[topic_name_len+1];
+                memcpy(&topic_name,&payload[payload_idx+2],topic_name_len);
+                topic_name[topic_name_len] = '\0';
+                if(payload[2+topic_name_len] != 0){
+                    printf("subscription with qos non-supported QoS=%x\n",payload[2+topic_name_len] );
+                    write(connfd,NULL,0);
+                    break;
+                }
+                mqtt_subscribe(topic_name,thread_index);
+                payload_idx+= topic_name_len+3;
+                sub_cnt++;
+            }
 
+            unsigned char suback[sub_cnt+4];
+            suback[0] = 0x90;
+            suback[1] = sub_cnt+2;
+            suback[2] = variable_header[0];
+            suback[3] = variable_header[1];
+            int i;
+            for(i=0; i<sub_cnt; i++){
+                suback[i+4] = 0;
+            }
+
+            write(connfd,suback,sub_cnt+4);
+        } else if (this_thread.connstat == CONNECTED && control_packet_type == PINGREQ){
+            printf("PINGREQ received from %d\n",thread_index);
+            unsigned char pingresp[2];
+            pingresp[0] = 0xD0; //pingresp
+            pingresp[1] = 0x00;
+            write(connfd, pingresp, 2);
         }
-
 
     }
 
