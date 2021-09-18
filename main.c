@@ -203,23 +203,23 @@ void printByteArray(unsigned char *arr, int size){
     printf("\n");
 }
 
-void mqtt_publish(char *topic_name, char *message){
-    printf("PUB %s %s",topic_name,message);
+void mqtt_send_message(int thread_from, int thread_to, char *topic_name, char *message){
+    printf("MESSAGE from slot %d;;; to slot %d;;; topic %s;;; message %s\n",thread_from, thread_to,topic_name,message);
+}
+
+void mqtt_publish(int thread_from, char *topic_name, char *message) {
+    printf("PUB topic: %s;;; message: %s\n", topic_name, message);
     int i, cnt;
-    for(i=0,cnt=0;i<MAXCLIENTS && cnt<client_count;i++){
-        puts("swipe");
-        printf("%d %d \n",cnt,client_count);
+    for (i = 0, cnt = 0; i < MAXCLIENTS && cnt < client_count; i++) {
         thread_t t = threads[i];
-        if(t.connfd){
+        if (t.connfd) {
             cnt++;
-            if(set_contains(&t.subscriptions,topic_name)){
-                printf("MESSAGE to conn %d;;; topic %s;;; message %s\n",i,topic_name,message);
-            }else{
-                puts("set doesnt contain");
+            if (set_contains(&t.subscriptions, topic_name) == SET_TRUE) {
+                mqtt_send_message(thread_from, i, topic_name, message);
             }
         }
-    }
 
+    }
 }
 
 void mqtt_subscribe(char *topic_name, int thread_index){
@@ -359,7 +359,7 @@ void handleClient(int thread_index){
             //no response needed for QoS=0
             write(connfd, NULL, 0);
 
-            mqtt_publish(topic_name,message);
+            mqtt_publish(thread_index,topic_name,message);
 
         } else if (this_thread.connstat == CONNECTED && control_packet_type == DISCONNECT){
 
