@@ -205,6 +205,20 @@ void printByteArray(unsigned char *arr, int size){
 
 void mqtt_send_message(int thread_from, int thread_to, char *topic_name, char *message){
     printf("MESSAGE from slot %d;;; to slot %d;;; topic %s;;; message %s\n",thread_from, thread_to,topic_name,message);
+    unsigned long topic_name_len = strlen(topic_name);
+    unsigned long message_len = strlen(message);
+    unsigned long response_len = 4+topic_name_len+message_len;
+    unsigned char response[response_len];
+    response[0] = 0x30;
+    response[1] = response_len-2;
+    response[2] = (unsigned char) topic_name_len >> 4;
+    response[3] = (unsigned char) topic_name_len & 0xFF;
+    memcpy(&response[4],topic_name,topic_name_len);
+    memcpy(&response[4+topic_name_len],message,message_len);
+
+    write(threads[thread_to].connfd,response,response_len);
+
+
 }
 
 void mqtt_publish(int thread_from, char *topic_name, char *message) {
