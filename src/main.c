@@ -54,8 +54,8 @@ int main (int argc, char **argv) {
         exit(4);
     }
 
-    printf("[Servidor no ar. Aguardando conexões na porta %d]\n",atoi(argv[1]));
-    printf("[Para finalizar, pressione CTRL+c ou rode um kill ou killall]\n");
+    printf("[Server running on port %d]\n",atoi(argv[1]));
+    printf("[Press CTRL+c to finish]\n");
 
 
 
