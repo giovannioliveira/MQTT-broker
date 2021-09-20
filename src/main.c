@@ -86,6 +86,9 @@ int main (int argc, char **argv) {
 }
 
 
+
+
+
 //---------------------------------------------------------------------------//
 // MAIN CLIENT HANDLER                                                       //
 //---------------------------------------------------------------------------//
@@ -266,6 +269,8 @@ void handleClient(int thread_index){
     printf("\nclosed connection %d\n",connfd);
     releaseThreadSlot(thread_index);
 }
+
+
 
 
 
