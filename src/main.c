@@ -1,6 +1,6 @@
 #include "main.h"
 
-int main (int argc, char **argv) {
+int main(int argc, char **argv) {
 
     initThreadSlots();
 
@@ -11,7 +11,7 @@ int main (int argc, char **argv) {
     struct sockaddr_in servaddr;
 
     if (argc != 2) {
-        fprintf(stderr,"Usage: mqtt-broker [port]\n");
+        fprintf(stderr, "Usage: mqtt-broker [port]\n");
         exit(1);
     }
 
@@ -37,10 +37,10 @@ int main (int argc, char **argv) {
      * argumento no shell (atoi(argv[1]))
      */
     bzero(&servaddr, sizeof(servaddr));
-    servaddr.sin_family      = AF_INET;
+    servaddr.sin_family = AF_INET;
     servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-    servaddr.sin_port        = htons(atoi(argv[1]));
-    if (bind(listenfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) == -1) {
+    servaddr.sin_port = htons(atoi(argv[1]));
+    if (bind(listenfd, (struct sockaddr *) &servaddr, sizeof(servaddr)) == -1) {
         perror("bind :(\n");
         exit(3);
     }
@@ -54,7 +54,7 @@ int main (int argc, char **argv) {
         exit(4);
     }
 
-    printf("[Server running on port %d]\n",atoi(argv[1]));
+    printf("[Server running on port %d]\n", atoi(argv[1]));
     printf("[Press CTRL+c to finish]\n");
 
 
@@ -69,16 +69,16 @@ int main (int argc, char **argv) {
          * da fila de conexões que foram aceitas no socket listenfd e
          * vai criar um socket específico para esta conexão. O descritor
          * deste novo socket é o retorno da função accept. */
-        if ((connfd = accept(listenfd, (struct sockaddr *) NULL, NULL)) == -1 ) {
+        if ((connfd = accept(listenfd, (struct sockaddr *) NULL, NULL)) == -1) {
             perror("accept :(\n");
             exit(5);
         }
 
         int slot = getNewThreadSlot(connfd);
-        if(slot == -1){
+        if (slot == -1) {
             perror("All connection slots are busy.");
             close(connfd);
-        }else{
+        } else {
             pthread_create(&threads[slot].thread, NULL, (void *) handleClient, slot);
         }
 
@@ -93,7 +93,7 @@ int main (int argc, char **argv) {
 // MAIN CLIENT HANDLER                                                       //
 //---------------------------------------------------------------------------//
 
-void handleClient(int thread_index){
+void handleClient(int thread_index) {
 
     /* Armazena o tamanho da string lida do cliente */
     thread_t this_thread = threads[thread_index];
@@ -103,12 +103,12 @@ void handleClient(int thread_index){
     int will_flag;
 //    int user_name_flag, password_flag, will_retain, will_qos, clean_session, keep_alive;
 
-    while(1){
+    while (1) {
 
         unsigned char fixed_header;
 
-        if(read(connfd,&fixed_header,1) != 1){
-            printf("connection %d closed by client\n",connfd);
+        if (read(connfd, &fixed_header, 1) != 1) {
+            printf("connection %d closed by client\n", connfd);
             break;
         }
 
@@ -116,51 +116,51 @@ void handleClient(int thread_index){
         int control_flag_bits = (0xF & fixed_header);
 
 
-        printf("\nNEW MQTT PACK: fixed header %x\n",fixed_header);
-        if(flag_bits[control_packet_type]!= control_flag_bits){
+        printf("\nNEW MQTT PACK: fixed header %x\n", fixed_header);
+        if (flag_bits[control_packet_type] != control_flag_bits) {
             printf("type doesn't match flag. closing connection %d\n", connfd);
             break;
         }
 
         int content_length = decodeLength(connfd);
-        if(content_length == -1){
-            printf("invalid content length. connection %d closed by client\n",connfd);
+        if (content_length == -1) {
+            printf("invalid content length. connection %d closed by client\n", connfd);
             break;
         }
         printf("message size = %d\n", content_length);
 
         unsigned char variable_header_len = variableHeaderLen[control_packet_type];
         unsigned char variable_header[variable_header_len];
-        if(variable_header_len){
-            if(read(connfd,variable_header,variable_header_len)!=variable_header_len){
-                printf("connection %d closed by client\n",connfd);
+        if (variable_header_len) {
+            if (read(connfd, variable_header, variable_header_len) != variable_header_len) {
+                printf("connection %d closed by client\n", connfd);
                 break;
             }
         }
 
 
         int payload_length = content_length - variable_header_len;
-        unsigned char payload[payload_length+1];
+        unsigned char payload[payload_length + 1];
 
-        printf("reading %d bytes from payload\n",payload_length);
-        if(read(connfd,payload,payload_length)!=payload_length){
-            printf("connection %d closed by client\n",connfd);
+        printf("reading %d bytes from payload\n", payload_length);
+        if (read(connfd, payload, payload_length) != payload_length) {
+            printf("connection %d closed by client\n", connfd);
             break;
         }
 
         payload[payload_length] = '\0';
 
 
-        if(control_packet_type == CONNECT){
+        if (control_packet_type == CONNECT) {
 
-            if( variable_header[0]!= 0 ||
-                variable_header[1]!= 4 ||
-                variable_header[2]!= 'M' ||
-                variable_header[3]!= 'Q' ||
-                variable_header[4]!= 'T' ||
-                variable_header[5]!= 'T' ||
-                variable_header[6]!= 4 ||
-                (variable_header[7] & 1) != 0){
+            if (variable_header[0] != 0 ||
+                variable_header[1] != 4 ||
+                variable_header[2] != 'M' ||
+                variable_header[3] != 'Q' ||
+                variable_header[4] != 'T' ||
+                variable_header[5] != 'T' ||
+                variable_header[6] != 4 ||
+                (variable_header[7] & 1) != 0) {
 
                 printf("invalid variable header\n");
                 break;
@@ -174,7 +174,7 @@ void handleClient(int thread_index){
 //            clean_session = variable_header[7] & 0x02;
 //            keep_alive = (variable_header[8] << 4) + variable_header[9];
 
-            if(will_flag){
+            if (will_flag) {
                 printf("unsuported will flag");
                 break;
             }
@@ -182,14 +182,14 @@ void handleClient(int thread_index){
             int id_idx = 2;
             int id_len = ((payload[0] << 4) + payload[1]);
 
-            if(this_thread.id)
+            if (this_thread.id)
                 free(this_thread.id);
-            this_thread.id = malloc(id_len+1);
+            this_thread.id = malloc(id_len + 1);
             //TODO check malloc ( and consider null id ? )
-            memcpy(this_thread.id,&payload[id_idx],id_len);
+            memcpy(this_thread.id, &payload[id_idx], id_len);
             this_thread.id[id_len] = '\0';
 
-            printf("Received CONNECT for node %d with ID=%s. Accepting connection\n",thread_index,this_thread.id);
+            printf("Received CONNECT for node %d with ID=%s. Accepting connection\n", thread_index, this_thread.id);
 
             unsigned char connack_response[4];
             connack_response[0] = 0x20;
@@ -201,62 +201,62 @@ void handleClient(int thread_index){
             write(connfd, connack_response, 4);
             this_thread.connstat = CONNECTED;
 
-            printf("MQTT connection established with %s\n",this_thread.id);
+            printf("MQTT connection established with %s\n", this_thread.id);
 
-        }else if(this_thread.connstat == CONNECTED && control_packet_type == PUBLISH){
+        } else if (this_thread.connstat == CONNECTED && control_packet_type == PUBLISH) {
 
-            int topic_name_len = (variable_header[0] << 4)+variable_header[1];
-            char topic_name[topic_name_len+1];
-            memcpy(topic_name,payload,topic_name_len);
+            int topic_name_len = (variable_header[0] << 4) + variable_header[1];
+            char topic_name[topic_name_len + 1];
+            memcpy(topic_name, payload, topic_name_len);
             topic_name[topic_name_len] = '\0';
 
 
-            int message_len = payload_length-topic_name_len;
-            char message[message_len+1];
-            memcpy(message,&payload[topic_name_len],message_len);
+            int message_len = payload_length - topic_name_len;
+            char message[message_len + 1];
+            memcpy(message, &payload[topic_name_len], message_len);
             message[message_len] = '\0';
 
             //no response needed for QoS=0
             write(connfd, NULL, 0);
 
-            mqtt_publish(thread_index,topic_name,message);
+            mqtt_publish(thread_index, topic_name, message);
 
-        } else if (this_thread.connstat == CONNECTED && control_packet_type == DISCONNECT){
+        } else if (this_thread.connstat == CONNECTED && control_packet_type == DISCONNECT) {
 
             mqtt_disconnect(thread_index);
 
-        } else if (this_thread.connstat == CONNECTED && control_packet_type == SUBSCRIBE){
+        } else if (this_thread.connstat == CONNECTED && control_packet_type == SUBSCRIBE) {
 
             int payload_idx = 0;
             int sub_cnt = 0;
-            while(payload_idx < (payload_length-1)){
-                int topic_name_len = (payload[payload_idx] << 4)+payload[payload_idx+1];
-                char topic_name[topic_name_len+1];
-                memcpy(&topic_name,&payload[payload_idx+2],topic_name_len);
+            while (payload_idx < (payload_length - 1)) {
+                int topic_name_len = (payload[payload_idx] << 4) + payload[payload_idx + 1];
+                char topic_name[topic_name_len + 1];
+                memcpy(&topic_name, &payload[payload_idx + 2], topic_name_len);
                 topic_name[topic_name_len] = '\0';
-                if(payload[2+topic_name_len] != 0){
-                    printf("subscription with qos non-supported QoS=%x\n",payload[2+topic_name_len] );
-                    write(connfd,NULL,0);
+                if (payload[2 + topic_name_len] != 0) {
+                    printf("subscription with qos non-supported QoS=%x\n", payload[2 + topic_name_len]);
+                    write(connfd, NULL, 0);
                     break;
                 }
-                mqtt_subscribe(topic_name,thread_index);
-                payload_idx+= topic_name_len+3;
+                mqtt_subscribe(topic_name, thread_index);
+                payload_idx += topic_name_len + 3;
                 sub_cnt++;
             }
 
-            unsigned char suback[sub_cnt+4];
+            unsigned char suback[sub_cnt + 4];
             suback[0] = 0x90;
-            suback[1] = sub_cnt+2;
+            suback[1] = sub_cnt + 2;
             suback[2] = variable_header[0];
             suback[3] = variable_header[1];
             int i;
-            for(i=0; i<sub_cnt; i++){
-                suback[i+4] = 0;
+            for (i = 0; i < sub_cnt; i++) {
+                suback[i + 4] = 0;
             }
 
-            write(connfd,suback,sub_cnt+4);
-        } else if (this_thread.connstat == CONNECTED && control_packet_type == PINGREQ){
-            printf("PINGREQ received from %d\n",thread_index);
+            write(connfd, suback, sub_cnt + 4);
+        } else if (this_thread.connstat == CONNECTED && control_packet_type == PINGREQ) {
+            printf("PINGREQ received from %d\n", thread_index);
             unsigned char pingresp[2];
             pingresp[0] = 0xD0; //pingresp
             pingresp[1] = 0x00;
@@ -266,31 +266,29 @@ void handleClient(int thread_index){
     }
 
     close(connfd);
-    printf("\nclosed connection %d\n",connfd);
+    printf("\nclosed connection %d\n", connfd);
     releaseThreadSlot(thread_index);
 }
-
-
-
 
 
 //---------------------------------------------------------------------------//
 // PROTOCOL ACTIONS                                                          //
 //---------------------------------------------------------------------------//
-void mqtt_send_message(int thread_from, int thread_to, char *topic_name, char *message){
-    printf("MESSAGE from slot %d;;; to slot %d;;; topic %s;;; message %s\n",thread_from, thread_to,topic_name,message);
+void mqtt_send_message(int thread_from, int thread_to, char *topic_name, char *message) {
+    printf("MESSAGE from slot %d;;; to slot %d;;; topic %s;;; message %s\n", thread_from, thread_to, topic_name,
+           message);
     unsigned long topic_name_len = strlen(topic_name);
     unsigned long message_len = strlen(message);
-    unsigned long response_len = 4+topic_name_len+message_len;
+    unsigned long response_len = 4 + topic_name_len + message_len;
     unsigned char response[response_len];
     response[0] = 0x30;
-    response[1] = response_len-2;
+    response[1] = response_len - 2;
     response[2] = (unsigned char) topic_name_len >> 4;
     response[3] = (unsigned char) topic_name_len & 0xFF;
-    memcpy(&response[4],topic_name,topic_name_len);
-    memcpy(&response[4+topic_name_len],message,message_len);
+    memcpy(&response[4], topic_name, topic_name_len);
+    memcpy(&response[4 + topic_name_len], message, message_len);
 
-    write(threads[thread_to].connfd,response,response_len);
+    write(threads[thread_to].connfd, response, response_len);
 }
 
 void mqtt_publish(int thread_from, char *topic_name, char *message) {
@@ -308,13 +306,13 @@ void mqtt_publish(int thread_from, char *topic_name, char *message) {
     }
 }
 
-void mqtt_subscribe(char *topic_name, int thread_index){
-    printf("SUB %s %d\n",topic_name, thread_index);
-    set_add(& (threads[thread_index].subscriptions),topic_name);
+void mqtt_subscribe(char *topic_name, int thread_index) {
+    printf("SUB %s %d\n", topic_name, thread_index);
+    set_add(&(threads[thread_index].subscriptions), topic_name);
 }
 
-void mqtt_disconnect(int thread_index){
-    printf("DISC %d\n",thread_index);
+void mqtt_disconnect(int thread_index) {
+    printf("DISC %d\n", thread_index);
 }
 
 
@@ -325,36 +323,36 @@ void mqtt_disconnect(int thread_index){
 // AUXILIARY FUNCTIONS                                                       //
 //---------------------------------------------------------------------------//
 
-void initThreadSlots(){
+void initThreadSlots() {
     int i;
-    for(i = 0; i<MAXCLIENTS; i++){
+    for (i = 0; i < MAXCLIENTS; i++) {
         threads[i].connfd = 0;
         set_init(&threads[i].subscriptions);
     }
     client_count = 0;
 }
 
-int getNewThreadSlot(int connfd){
-    if(client_count>=MAXCLIENTS){
-        printf("unable to found available slot for connection %d\n",connfd);
+int getNewThreadSlot(int connfd) {
+    if (client_count >= MAXCLIENTS) {
+        printf("unable to found available slot for connection %d\n", connfd);
         return -1;
-    }else{
+    } else {
         int i;
         pthread_mutex_lock(&lock);
-        for(i=0;i<MAXCLIENTS;i++){
-            if(!threads[i].connfd){
+        for (i = 0; i < MAXCLIENTS; i++) {
+            if (!threads[i].connfd) {
                 threads[i].connfd = connfd;
                 break;
             }
         }
         client_count++;
         pthread_mutex_unlock(&lock);
-        printf("slot %d reserved for connection %d\n",i,connfd);
+        printf("slot %d reserved for connection %d\n", i, connfd);
         return i;
     }
 }
 
-void releaseThreadSlot(int i){
+void releaseThreadSlot(int i) {
 
     pthread_mutex_lock(&lock);
     threads[i].connfd = 0;
@@ -363,25 +361,25 @@ void releaseThreadSlot(int i){
     set_clear(&threads[i].subscriptions);
     client_count--;
     pthread_mutex_unlock(&lock);
-    printf("release slot %d\n",i);
+    printf("release slot %d\n", i);
 
 }
 
-int decodeLength(int connfd){
+int decodeLength(int connfd) {
     int mult = 1;
     int value = 0;
     int iteration = 0;
     unsigned char encodedByte;
-    do{
-        if(read(connfd,&encodedByte,1)!=1){
+    do {
+        if (read(connfd, &encodedByte, 1) != 1) {
             return -1;
         }
         value += (encodedByte & 127) * mult;
         mult *= 128;
-        if(mult > 128*128*128){
+        if (mult > 128 * 128 * 128) {
             return -1;
         }
         iteration++;
-    }while((encodedByte & 128) != 0);
+    } while ((encodedByte & 128) != 0);
     return value;
 }
