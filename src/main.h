@@ -28,7 +28,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <pthread.h>
-#include "lib/set.h"
+#include "../lib/set.h"
 
 #define _GNU_SOURCE
 #define LISTENQ 1
