@@ -47,12 +47,14 @@ RUNNING
 -------
 From root directory and using a Linux x64 environment, run:
 $ chmod +x ./build/MQTT_broker # gives permission to executable
+
 $ ./build/MQTT_broker 1883 # runs broken in port 1883
 
 
 BUILDING FROM SOURCE
 --------------------
 $ cmake . -B ./build -DCMAKE_BUILD_TYPE="Release" && make -C ./build # runs Cmake and build project with Make
+
 $ ./build/MQTT_broker 1883 # runs broken in port 1883
 
 
